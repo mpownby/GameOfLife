@@ -18,12 +18,44 @@ public class BoardService : IBoardService
 
     public int CreateNewBoard(IReadOnlyCollection<Cell> liveCells)
     {
-        throw new NotImplementedException();
+        ArgumentNullException.ThrowIfNull(liveCells);
+
+        var state = new BoardState
+        {
+            InitialState = new HashSet<Cell>(liveCells),
+            CurrentState = new HashSet<Cell>(liveCells),    // with 0 iterations, current state matches initial state
+            IterationCount = 0
+        };
+
+        return _boardRepository.CreateNewBoard(state);
     }
 
     public IReadOnlyCollection<Cell> ConvertGridToLiveCells(bool[][] grid)
     {
-        throw new NotImplementedException();
+        ArgumentNullException.ThrowIfNull(grid);
+
+        List<Cell> result = [];
+
+        for (int row = 0; row < grid.Length; row++)
+        {
+            // Bound by THIS row's length so jagged grids are handled correctly
+            // (rather than assuming every row is as wide as grid[0]).
+            bool[]? gridRow = grid[row];
+            if (gridRow == null)
+            {
+                throw new ArgumentException("Grid row cannot be null.");
+            }
+
+            for (int col = 0; col < gridRow.Length; col++)
+            {
+                if (gridRow[col])
+                {
+                    result.Add(new Cell(col, row));
+                }
+            }
+        }
+
+        return result;
     }
 
     public BoardState GetStateAfterIterations(int id, int iterationCount)
