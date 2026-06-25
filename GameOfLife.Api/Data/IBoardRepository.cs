@@ -1,3 +1,5 @@
+using GameOfLife.Api.Data.Objects;
+
 namespace GameOfLife.Api.Data;
 
 /// <summary>
@@ -7,4 +9,9 @@ namespace GameOfLife.Api.Data;
 /// </summary>
 public interface IBoardRepository
 {
+    int CreateNewBoard(BoardState src);
+
+    BoardState GetExistingBoard(int id);
+
+    void UpdateExistingBoard(int id, BoardState state);
 }

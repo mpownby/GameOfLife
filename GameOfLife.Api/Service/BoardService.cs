@@ -1,10 +1,10 @@
 using GameOfLife.Api.Data;
+using GameOfLife.Api.Data.Objects;
 
 namespace GameOfLife.Api.Service;
 
 /// <summary>
-/// Implementation of <see cref="IBoardService"/>. Skeleton only: the rules engine
-/// and orchestration to be written. Depends on <see cref="IBoardRepository"/>
+/// Implementation of <see cref="IBoardService"/>. Depends on <see cref="IBoardRepository"/>
 /// (the interface, not a concrete store) for persistence.
 /// </summary>
 public class BoardService : IBoardService
@@ -14,5 +14,25 @@ public class BoardService : IBoardService
     public BoardService(IBoardRepository boardRepository)
     {
         _boardRepository = boardRepository;
+    }
+
+    public int CreateNewBoard(IReadOnlyCollection<Cell> liveCells)
+    {
+        throw new NotImplementedException();
+    }
+
+    public IReadOnlyCollection<Cell> ConvertGridToLiveCells(bool[][] grid)
+    {
+        throw new NotImplementedException();
+    }
+
+    public BoardState GetStateAfterIterations(int id, int iterationCount)
+    {
+        throw new NotImplementedException();
+    }
+
+    public BoardState FinalizeBoard(int id, int maxIterationCount)
+    {
+        throw new NotImplementedException();
     }
 }

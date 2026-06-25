@@ -25,8 +25,8 @@ public class BoardsController : ControllerBase
     [HttpPost]
     public ActionResult CreateBoard([FromBody] CoordinateBoardRequest request)
     {
-        // TODO: validate request, map request.LiveCells -> domain board,
-        // hand to _boardService to create/persist, then
+        // TODO: validate request, map request.LiveCells (long[][]) -> IReadOnlyCollection<Cell>,
+        // call _boardService.CreateNewBoard(cells), then
         //   return CreatedAtAction(nameof(GetBoard), new { id }, new { id });
         return StatusCode(StatusCodes.Status501NotImplemented, new { error = "Not implemented yet" });
     }
@@ -37,8 +37,8 @@ public class BoardsController : ControllerBase
     [HttpPost("from-grid")]
     public ActionResult CreateBoardFromGrid([FromBody] GridBoardRequest request)
     {
-        // TODO: translate request.Grid (row/col, true = alive) into live coordinates
-        // (x = col, y = row), then follow the same create/persist flow as CreateBoard.
+        // TODO: cells = _boardService.ConvertGridToLiveCells(request.Grid), then
+        // _boardService.CreateNewBoard(cells) — same create/persist flow as CreateBoard.
         return StatusCode(StatusCodes.Status501NotImplemented, new { error = "Not implemented yet" });
     }
 }

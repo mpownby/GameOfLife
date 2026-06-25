@@ -20,7 +20,7 @@ internal class Program
         // Dependency Injection: wire each layer to its interface.
         //   - Repository is a Singleton: a single shared persistence store.
         //   - Service is Scoped: per-request; holds no long-lived state of its own.
-        builder.Services.AddSingleton<IBoardRepository, BoardRepository>();
+        builder.Services.AddSingleton<IBoardRepository, BoardRepositoryUsingFileSystem>();
         builder.Services.AddScoped<IBoardService, BoardService>();
 
         var app = builder.Build();

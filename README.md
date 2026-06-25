@@ -30,3 +30,23 @@ Next question is what to do when the coordinate overflows.  There's two ways to 
 This type of design would mean that we would expect the grid would wraparound implicitly, so we'd need to make sure CheckForOverflowUnderflow is disabled.  If wraparound did occur, cells could collide with each other after wrapping and corrupt the results.  We should investigate writing a special unit test that covers this case, and make sure we are being intentional about the outcome rather than just leaving it as a big question mark.
 
 Since we're using 64-bit integers, we can't actually allocate a 'very large grid' 
+
+## Thinking about how to store board state internally and present board state via the API.
+
+The requirements say to return next state or return X number of states away.  For the service layer, this sounds like the same method call (with 'next' being 1 state away).  We can implement two API calls.
+
+It does not say what format the state needs to be returned in, nor does it say whether the state needs to be sorted.  This implies that we can use a Set or a Dictionary to store state internally, and return a list via the API to ensure that the JSON serializer gives the result we want.
+
+The requirements say that the 'get final state' API fails after X attempts.  This implies that the API will also include a user configurable X value.  Do we want to adjust this value if the user passes in an obscenely huge one?  Since this is just a quick n' dirty project, we probably just let the user provide whatever they want and let the app run long.  If it were a large multi-user production service, we'd probably want to cap the X value so that one API call can't tie up a bunch of resources.
+
+I am noticing the requirement to restart/crash/etc and that multiple boards can be created.  This implies that all of the API calls aside from create will take in an ID of an existing board.  We need to make sure we return 404 if they enter in an invalid ID and add a specific test for this.
+
+## Fleshing out the interfaces
+
+Since we're providing an alternate way for the API to create the board, I'm creating an IBoardServiceHelper interface to make unit tests easy to write.  I always try to avoid having a "unit" test that tests more than one method.  UPDATE: changed my mind on this one since I realized that the transformation method does not need to call the create method; the web layer can make one call to transform and one call to create.  This is cleaner and simpler than having a separate interface/class.
+
+Since the request objects can be used by both the web and service layer, I'm moving them out of the web layer into the service layer.  UPDATE: changed my mind on this one since the way we're storing the coordinates internally is different from how we're returning it to the API caller.
+
+## Board state
+
+I'm thinking we should store both the initial and current state as well as the number of iterations that have elapsed.  While the current state could be inferred from the initial state and the iteration count, there is a performance cost to replay the iterations every time (and disk space is cheap) and even more importantly if we have the current state, we can dianose problems with our algorithm (or confirm that it's working correctly) which we would not be able to do otherwise.
