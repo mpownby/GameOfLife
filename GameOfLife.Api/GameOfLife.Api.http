@@ -1,0 +1,12 @@
+@GameOfLife_HostAddress = http://localhost:5041
+
+### Health check
+GET {{GameOfLife_HostAddress}}/health
+Accept: application/json
+
+###
+# TODO: add requests here as you build endpoints, e.g.
+#   POST {{GameOfLife_HostAddress}}/api/boards          (upload a new board, returns id)
+#   GET  {{GameOfLife_HostAddress}}/api/boards/{id}/next
+#   GET  {{GameOfLife_HostAddress}}/api/boards/{id}/states/{steps}
+#   GET  {{GameOfLife_HostAddress}}/api/boards/{id}/final?maxAttempts=1000

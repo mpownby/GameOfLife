@@ -55,3 +55,15 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# Visual Studio temp / user files
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.bin
+
+# Local board persistence (durability store) - don't commit runtime data
+*.boards
+boarddata/
