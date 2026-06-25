@@ -24,6 +24,12 @@
     </PackageReference>
   </ItemGroup>
 
+  <!-- Needed so the test project can compile against ASP.NET Core MVC types
+       (ControllerBase, CreatedAtActionResult, BadRequestObjectResult, ...). -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\GameOfLife.Api\GameOfLife.Api.csproj" />
   </ItemGroup>
