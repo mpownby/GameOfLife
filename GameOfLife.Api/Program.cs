@@ -1,4 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
+using GameOfLife.Api.Data;
+using GameOfLife.Api.Service;
 
 // This is the composition root: the only place that wires concrete implementations
 // to their interfaces. It is infrastructure glue, not business logic, so it is
@@ -15,17 +17,11 @@ internal class Program
         builder.Services.AddEndpointsApiExplorer();
         builder.Services.AddSwaggerGen();
 
-        // ---------------------------------------------------------------------
-        // TODO (you write these): Dependency Injection wiring for each layer.
-        // Register interfaces -> implementations here once you've created them, e.g.:
-        //
-        //   builder.Services.AddSingleton<IBoardRepository, FileBoardRepository>();
-        //   builder.Services.AddScoped<IGameOfLifeService, GameOfLifeService>();
-        //
-        // Lifetime guidance:
-        //   - The persistence/repository is typically a Singleton (shared store).
-        //   - The service layer is usually Scoped (per-request) unless it holds no state.
-        // ---------------------------------------------------------------------
+        // Dependency Injection: wire each layer to its interface.
+        //   - Repository is a Singleton: a single shared persistence store.
+        //   - Service is Scoped: per-request; holds no long-lived state of its own.
+        builder.Services.AddSingleton<IBoardRepository, BoardRepository>();
+        builder.Services.AddScoped<IBoardService, BoardService>();
 
         var app = builder.Build();
 

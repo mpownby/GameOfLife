@@ -12,17 +12,8 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
   </ItemGroup>
 
-  <!--
-    Empty layer folders are declared so they appear in the IDE before you add code.
-    Web    = controllers / DTOs (HTTP concerns only)
-    Service = Game of Life rules + orchestration (the encapsulated core)
-    Data    = persistence behind a repository interface (durability lives here)
-    Remove a Folder entry once it contains at least one .cs file.
-  -->
+  <!-- Domain model folder is still empty; declared so it shows in the IDE. Remove once it has a file. -->
   <ItemGroup>
-    <Folder Include="Web\" />
-    <Folder Include="Service\" />
-    <Folder Include="Data\" />
     <Folder Include="Data\Model\" />
   </ItemGroup>
 
