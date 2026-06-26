@@ -3,11 +3,142 @@ The Game Of Life ( https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life )
 
 # Building
 
-TODO
+This is a standard .NET solution, so there's nothing exotic to set up.
+
+- **Prerequisite:** the .NET 10 SDK (the API targets `net10.0`). Verify with `dotnet --version`.
+- **Restore + build everything:**
+    ```
+    dotnet build
+    ```
+    A clean build produces 0 warnings; I treat any warning as a defect to fix, not noise to ignore.
+- **Run the tests.** There are two test projects on purpose — unit tests must be true unit tests, so the file-system tests live separately as integration tests (see the log below).
+    ```
+    dotnet test                                         # everything
+    dotnet test GameOfLife.Unit.Test                    # fast, no I/O
+    dotnet test GameOfLife.Integration.Test             # touches the real disk
+    ```
 
 # Usage
 
-TODO
+Run the API from the API project:
+
+```
+dotnet run --project GameOfLife.Api
+```
+
+It listens on `http://localhost:5041` (and `https://localhost:7156` if you pick the `https` profile). Board
+state is persisted to `GameOfLife.Api/boarddata/boards.json`, so boards survive a restart or crash — stop and
+re-run the app and your boards are still there.
+
+Two ways to drive it: Swagger for poking around by hand, curl for scripting. The endpoints are the same either way:
+
+| Method & route | What it does |
+| --- | --- |
+| `POST /api/boards` | Upload a board as sparse `[x, y]` pairs (the format that scales to large boards). Returns the new `id`. |
+| `POST /api/boards/from-grid` | Upload a small dense grid (`true` = alive) — convenient for hand-written fixtures. Returns the new `id`. |
+| `GET /api/boards/{id}` | Current state of a board. |
+| `GET /api/boards/{id}/next` | Advance one step and return the new state. |
+| `GET /api/boards/{id}/states/{steps}` | Advance `steps` iterations and return the new state. |
+| `GET /api/boards/{id}/final?maxIterations=N` | Step until the board settles (still life / extinction). Returns `422` if it hasn't settled within `N` iterations (default 1000). |
+
+A board's state comes back as both the `initialState` it was uploaded with and the `currentState` after
+`iterationCount` iterations, e.g. `{ "initialState": [...], "currentState": [...], "iterationCount": 0 }`,
+where each cell is `{ "x": <long>, "y": <long> }`.
+
+## Using Swagger
+
+1. Run the app and open `http://localhost:5041/swagger` in a browser (the launch profile opens it for you).
+2. Each endpoint has a description, expected request body, and the status codes it can return (`404` for an
+   unknown id, `422` when a board won't settle, etc.).
+3. Expand an endpoint → **Try it out** → edit the request body / parameters → **Execute**. Swagger shows you
+   the exact curl command it issued plus the response, which is a handy way to crib the curl examples below.
+
+## Using curl
+
+The examples below quote the JSON bodies with single quotes so they paste cleanly into bash. On Windows
+PowerShell, call `curl.exe` (plain `curl` is an alias for `Invoke-WebRequest`); the single-quoted bodies still
+work as-is.
+
+### Example: a still life (the Block)
+
+A 2x2 Block is the simplest *still life* — it never changes. I'll upload it with the dense-grid convenience
+endpoint, since a 2x2 square is trivial to write that way:
+
+```
+curl -X POST http://localhost:5041/api/boards/from-grid \
+  -H "Content-Type: application/json" \
+  -d '{ "grid": [[true, true], [true, true]] }'
+```
+
+Response (your `id` may differ — boards are numbered in creation order):
+
+```json
+{ "id": 0 }
+```
+
+The grid maps `grid[row][col]` to `(x = col, y = row)`, so this is the four cells `(0,0) (1,0) (0,1) (1,1)`.
+Ask for its final state — because it's a still life, it settles immediately and comes straight back unchanged:
+
+```
+curl http://localhost:5041/api/boards/0/final
+```
+
+```json
+{
+  "initialState": [ {"x":0,"y":0}, {"x":1,"y":0}, {"x":0,"y":1}, {"x":1,"y":1} ],
+  "currentState": [ {"x":0,"y":0}, {"x":1,"y":0}, {"x":0,"y":1}, {"x":1,"y":1} ],
+  "iterationCount": 1
+}
+```
+
+`currentState` equals `initialState`: stepping the Block produces the Block, which is exactly the "next state
+equals current state" definition of a settled board.
+
+### Example: an oscillator (the Blinker)
+
+A Blinker is three cells in a row that flips between horizontal and vertical every step — period 2. I'll upload
+it with the sparse coordinate endpoint as the three cells `(0,0) (1,0) (2,0)`:
+
+```
+curl -X POST http://localhost:5041/api/boards \
+  -H "Content-Type: application/json" \
+  -d '{ "liveCells": [[0, 0], [1, 0], [2, 0]] }'
+```
+
+```json
+{ "id": 1 }
+```
+
+Ask for the next state and watch the row pivot to a column (centered on `(1,0)`):
+
+```
+curl http://localhost:5041/api/boards/1/next
+```
+
+```json
+{
+  "initialState": [ {"x":0,"y":0}, {"x":1,"y":0}, {"x":2,"y":0} ],
+  "currentState": [ {"x":1,"y":-1}, {"x":1,"y":0}, {"x":1,"y":1} ],
+  "iterationCount": 1
+}
+```
+
+Call `/next` again and it flips back to the original row. Because it oscillates forever it never reaches a
+fixed point, so asking for its *final* state is the error case from the brief — it exhausts the iteration
+budget and returns `422 Unprocessable Entity`:
+
+```
+curl -i http://localhost:5041/api/boards/1/final?maxIterations=100
+```
+
+```
+HTTP/1.1 422 Unprocessable Entity
+...
+{ "error": "...", "boardId": 1, "maxIterationCount": 100 }
+```
+
+(Cycle detection to recognize an oscillator and fail *fast* — rather than grinding to the budget — is noted as
+a future optimization in the log below.)
 
 # Architectural decision log
 
@@ -113,3 +244,7 @@ My partial Step algorithm is computing the neighbor counts of all live cells.  T
 I can invert this technique by instead observing that for every live cell, all 8 of its neighbors should have their neighbor counts incremented.  This will handle both live cells and dead cells and is an elegant way to finish my algorithm.
 
 Adding oscillator/spaceship unit tests to prove that my fix works.
+
+## Done
+
+All work is done, and I used Stryker to ensure unit tests are actually doing their job.
