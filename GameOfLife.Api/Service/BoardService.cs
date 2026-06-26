@@ -4,8 +4,7 @@ using GameOfLife.Api.Data.Objects;
 namespace GameOfLife.Api.Service;
 
 /// <summary>
-/// Implementation of <see cref="IBoardService"/>. Depends on <see cref="IBoardRepository"/>
-/// (the interface, not a concrete store) for persistence.
+/// Implementation of <see cref="IBoardService"/>.
 /// </summary>
 public class BoardService : IBoardService
 {

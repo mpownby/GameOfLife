@@ -82,3 +82,18 @@ Prompt I gave to Claude to make this change:
 
 The implementation for the methods in this class are mostly complete.
 I am noticing that I have a method called GetStateAfterIterations which is misnamed since this method actually is intended to persist changes in case we need to recover from a crash or resume.  Renaming method to IterateNSteps to be more clear.
+
+## Working on Step algorithm now, plus things I don't want to forget about.
+
+I'm implementing Step now, but there are a few things I don't want to forget about: add tests to make sure Controller is returning the right status codes.  For example, will it return 404 if the user refers to an id that does not exist?  Will it return a proper status code if finalize fails?
+
+Also need to add some annotatios to swagger to give the user better hints about API usage.
+
+For the Step implementation, I'm going to add a bunch of unit tests first, then implement Step and make sure the tests all pass.
+
+Theoretical approach for Step is to observe that for each cell that has 3 alive neighbors, that cell will be alive next iteration.  This includes cells that are alive and will survive and cells that were dead and will become alive.
+A cell that has 2 alive neighbors and is currently alive will survive.
+All other cells will die.
+I'll use a Dictionary to keep track of this and create a new HashSet to be returned rather than try to modify the incoming HashSet (which wouldn't work since I need to make all changes simultaneously).
+
+I've got partial BoardStepper implemented and tests written for still life, but my boardstepper implementation won't work on oscillators or spaceships yet because I am not checking the neighbor count for dead cells.
