@@ -11,13 +11,20 @@ public class BoardStepper : IBoardStepper
     {
         var result = new HashSet<Cell>();   // what we return
 
-        // tracks the count of all neighbors of cells
+        // live-neighbor count for every cell adjacent to at least one live cell
         var dictNeighborCount = new Dictionary<Cell, int>();
 
         // create the dictionary
         foreach (Cell cell in liveCells)
         {
-            StepHelper(liveCells, cell, dictNeighborCount);
+            IncrementNeighborCount(new Cell(cell.X - 1, cell.Y), dictNeighborCount);    // left
+            IncrementNeighborCount(new Cell(cell.X - 1, cell.Y - 1), dictNeighborCount);    // upper-left
+            IncrementNeighborCount(new Cell(cell.X, cell.Y - 1), dictNeighborCount);    // top
+            IncrementNeighborCount(new Cell(cell.X + 1, cell.Y - 1), dictNeighborCount);    // upper-right
+            IncrementNeighborCount(new Cell(cell.X + 1, cell.Y), dictNeighborCount);    // right
+            IncrementNeighborCount(new Cell(cell.X + 1, cell.Y + 1), dictNeighborCount);    // lower-right
+            IncrementNeighborCount(new Cell(cell.X, cell.Y + 1), dictNeighborCount);    // bottom
+            IncrementNeighborCount(new Cell(cell.X - 1, cell.Y + 1), dictNeighborCount);    // lower-left
         }
 
         // now create the new cell set based on the dictionary counts
@@ -39,22 +46,13 @@ public class BoardStepper : IBoardStepper
         return result;
     }
 
-    private void StepHelper(IReadOnlySet<Cell> liveCells, Cell cell, Dictionary<Cell, int> dictNeighborCount)
+    private void IncrementNeighborCount(Cell cell, Dictionary<Cell, int> dictNeighborCount)
     {
-        int countNeighbors = 0;
-
-        if (liveCells.Contains(new Cell(cell.X - 1, cell.Y))) countNeighbors++; // left
-        if (liveCells.Contains(new Cell(cell.X - 1, cell.Y - 1))) countNeighbors++; // upper-left
-        if (liveCells.Contains(new Cell(cell.X, cell.Y - 1))) countNeighbors++; // top
-        if (liveCells.Contains(new Cell(cell.X + 1, cell.Y - 1))) countNeighbors++; // upper-right
-        if (liveCells.Contains(new Cell(cell.X + 1, cell.Y))) countNeighbors++; // right
-        if (liveCells.Contains(new Cell(cell.X + 1, cell.Y + 1))) countNeighbors++; // lower-right
-        if (liveCells.Contains(new Cell(cell.X, cell.Y + 1))) countNeighbors++; // bottom
-        if (liveCells.Contains(new Cell(cell.X - 1, cell.Y + 1))) countNeighbors++; // lower-left
-
-        if (countNeighbors > 0)
-        {
-            dictNeighborCount[cell] = countNeighbors;
-        }
+        // GetValueOrDefault returns 0 for a key that isn't present yet, so this both
+        // seeds and increments in one line.
+        // A faster alternative is CollectionsMarshal.GetValueRefOrAddDefault(dictNeighborCount, cell, out _)++;
+        // which hashes the key only once instead of twice. I find it less readable, so I've
+        // kept the version below; if performance becomes crucial, I would switch to it.
+        dictNeighborCount[cell] = dictNeighborCount.GetValueOrDefault(cell) + 1;
     }
 }

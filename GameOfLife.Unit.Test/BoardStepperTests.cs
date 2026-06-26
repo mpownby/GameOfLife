@@ -86,5 +86,129 @@ namespace GameOfLife.Unit.Test
         ];
 
         #endregion
+
+        #region Oscillators
+
+        // An oscillator returns to its starting state after a fixed period. Stepping one
+        // generation lands on the next phase, which (unlike a still life) REQUIRES births:
+        // dead cells with exactly 3 live neighbors must come alive. The current Step only
+        // counts neighbors of already-live cells, so births never fire — these cases should
+        // fail until that gap is closed.
+        [TestCaseSource(nameof(OscillatorPatterns))]
+        public void Oscillator_AdvancesToNextPhase(Cell[] cells, Cell[] expectedNext)
+        {
+            var cellsSrc = new HashSet<Cell>(cells);
+
+            HashSet<Cell> actual = _service.Step(cellsSrc);
+
+            Assert.That(actual.SetEquals(new HashSet<Cell>(expectedNext)), Is.True);
+        }
+
+        private static readonly TestCaseData[] OscillatorPatterns =
+        [
+            // blinker (period 2): horizontal bar -> vertical bar.
+            //   . . .        . X .
+            //   X X X   ->   . X .
+            //   . . .        . X .
+            new TestCaseData(
+                new Cell[] { new(0, 1), new(1, 1), new(2, 1) },
+                new Cell[] { new(1, 0), new(1, 1), new(1, 2) })
+                .SetName("Blinker"),
+
+            // toad (period 2):
+            //   . X X X       . . X .
+            //   X X X .  ->   X . . X
+            //                 X . . X
+            //                 . X . .
+            new TestCaseData(
+                new Cell[]
+                {
+                    new(1, 0), new(2, 0), new(3, 0),
+                    new(0, 1), new(1, 1), new(2, 1),
+                },
+                new Cell[]
+                {
+                    new(2, -1),
+                    new(0, 0), new(3, 0),
+                    new(0, 1), new(3, 1),
+                    new(1, 2),
+                })
+                .SetName("Toad"),
+
+            // beacon (period 2): the two cells where the blocks touch blink off.
+            //   X X . .       X X . .
+            //   X X . .       X . . .
+            //   . . X X  ->   . . . X
+            //   . . X X       . . X X
+            new TestCaseData(
+                new Cell[]
+                {
+                    new(0, 0), new(1, 0),
+                    new(0, 1), new(1, 1),
+                    new(2, 2), new(3, 2),
+                    new(2, 3), new(3, 3),
+                },
+                new Cell[]
+                {
+                    new(0, 0), new(1, 0),
+                    new(0, 1),
+                    new(3, 2),
+                    new(2, 3), new(3, 3),
+                })
+                .SetName("Beacon"),
+        ];
+
+        #endregion
+
+        #region Spaceships
+
+        // A spaceship returns to its original shape but TRANSLATED after a fixed period,
+        // gliding across the board. This is the strongest single check on the stepper: it
+        // exercises births, survivals, and deaths together over multiple generations, so any
+        // rule error accumulates and corrupts the shape instead of cleanly translating it.
+        [TestCaseSource(nameof(SpaceshipPatterns))]
+        public void Spaceship_TranslatesAfterOnePeriod(Cell[] cells, int period, long dx, long dy)
+        {
+            var current = new HashSet<Cell>(cells);
+
+            for (int i = 0; i < period; i++)
+            {
+                current = _service.Step(current);
+            }
+
+            var expected = new HashSet<Cell>(cells.Select(c => new Cell(c.X + dx, c.Y + dy)));
+
+            Assert.That(current.SetEquals(expected), Is.True);
+        }
+
+        private static readonly TestCaseData[] SpaceshipPatterns =
+        [
+            // glider (period 4): travels diagonally, +1 x and +1 y per period.
+            //   . X .
+            //   . . X
+            //   X X X
+            new TestCaseData(
+                new Cell[] { new(1, 0), new(2, 1), new(0, 2), new(1, 2), new(2, 2) },
+                4, 1L, 1L)
+                .SetName("Glider"),
+
+            // lightweight spaceship (LWSS, period 4): travels left, -2 x per period.
+            //   . X . . X
+            //   X . . . .
+            //   X . . . X
+            //   X X X X .
+            new TestCaseData(
+                new Cell[]
+                {
+                    new(1, 0), new(4, 0),
+                    new(0, 1),
+                    new(0, 2), new(4, 2),
+                    new(0, 3), new(1, 3), new(2, 3), new(3, 3),
+                },
+                4, -2L, 0L)
+                .SetName("LightweightSpaceship"),
+        ];
+
+        #endregion
     }
 }

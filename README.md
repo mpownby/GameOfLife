@@ -1,6 +1,12 @@
 # GameOfLife
 The Game Of Life ( https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life )
 
+# TODO
+
+- Run test suite through Styker to get > 80% mutation score
+- Write tests for controller to ensure proper status codes are being returned (404 if not found, for example)
+- Add swagger annotations for a more user-friendly experience
+
 # Architectural decision log
 
 ## Planning phase, no code written yet, just a skeleton C# project.
@@ -97,3 +103,11 @@ All other cells will die.
 I'll use a Dictionary to keep track of this and create a new HashSet to be returned rather than try to modify the incoming HashSet (which wouldn't work since I need to make all changes simultaneously).
 
 I've got partial BoardStepper implemented and tests written for still life, but my boardstepper implementation won't work on oscillators or spaceships yet because I am not checking the neighbor count for dead cells.
+
+## Finishing the Step algorithm
+
+My partial Step algorithm is computing the neighbor counts of all live cells.  This has a gap where dead cells' neighbors are never counted.
+
+I can invert this technique by instead observing that for every live cell, all 8 of its neighbors should have their neighbor counts incremented.  This will handle both live cells and dead cells and is an elegant way to finish my algorithm.
+
+Adding oscillator/spaceship unit tests to prove that my fix works.
