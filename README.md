@@ -36,10 +36,14 @@ Two ways to drive it: Swagger for poking around by hand, curl for scripting. The
 | --- | --- |
 | `POST /api/boards` | Upload a board as sparse `[x, y]` pairs (the format that scales to large boards). Returns the new `id`. |
 | `POST /api/boards/from-grid` | Upload a small dense grid (`true` = alive) — convenient for hand-written fixtures. Returns the new `id`. |
-| `GET /api/boards/{id}` | Current state of a board. |
-| `GET /api/boards/{id}/next` | Advance one step and return the new state. |
-| `GET /api/boards/{id}/states/{steps}` | Advance `steps` iterations and return the new state. |
-| `GET /api/boards/{id}/final?maxIterations=N` | Step until the board settles (still life / extinction). Returns `422` if it hasn't settled within `N` iterations (default 1000). |
+| `GET /api/boards/{id}` | Current state of a board (a safe, side-effect-free read). |
+| `POST /api/boards/{id}/next` | Advance one step and return the new state. |
+| `POST /api/boards/{id}/states/{steps}` | Advance `steps` iterations and return the new state. |
+| `POST /api/boards/{id}/final?maxIterations=N` | Step until the board settles (still life / extinction). Returns `422` if it hasn't settled within `N` iterations (default 1000). |
+
+The advance endpoints (`next`, `states`, `final`) are `POST`, not `GET`: each one mutates and persists the board's
+stored state (it advances the cursor), so it is neither safe nor idempotent. Reading a board
+(`GET /api/boards/{id}`) is the only safe verb.
 
 A board's state comes back as both the `initialState` it was uploaded with and the `currentState` after
 `iterationCount` iterations, e.g. `{ "initialState": [...], "currentState": [...], "iterationCount": 0 }`,
@@ -80,7 +84,7 @@ The grid maps `grid[row][col]` to `(x = col, y = row)`, so this is the four cell
 Ask for its final state — because it's a still life, it settles immediately and comes straight back unchanged:
 
 ```
-curl http://localhost:5041/api/boards/0/final
+curl -X POST http://localhost:5041/api/boards/0/final
 ```
 
 ```json
@@ -112,7 +116,7 @@ curl -X POST http://localhost:5041/api/boards \
 Ask for the next state and watch the row pivot to a column (centered on `(1,0)`):
 
 ```
-curl http://localhost:5041/api/boards/1/next
+curl -X POST http://localhost:5041/api/boards/1/next
 ```
 
 ```json
@@ -128,7 +132,7 @@ fixed point, so asking for its *final* state is the error case from the brief �
 budget and returns `422 Unprocessable Entity`:
 
 ```
-curl -i http://localhost:5041/api/boards/1/final?maxIterations=100
+curl -i -X POST "http://localhost:5041/api/boards/1/final?maxIterations=100"
 ```
 
 ```
@@ -248,3 +252,23 @@ Adding oscillator/spaceship unit tests to prove that my fix works.
 ## Done
 
 All work is done, and I used Stryker to ensure unit tests are actually doing their job.
+
+## Whoops, final audit found issues
+
+I've fixed these issues that I found when doing a final audit:
+- I didn't have a unit test to test the wraparound behavior explicitly, like I had planned to do earlier.  Fixed.
+- Controller methods that modify state were GET which is supposed to be read-only.  Changed controller methods that modify state so that they aren't GET anymore.
+- The locking I put in the data layer missed the read-modify-write behavior in the service layer, so the project was technically not thread safe.  Added locking in the service layer to fix the read-modify-write
+- Some of the controller methods were not using the error-mapping wrapper that the rest of the controller methods were using.  Fixed.
+
+## About cycle detection
+
+I ended up not adding cycle detection, just left comments about where it would go.
+
+I'd implement it using:
+
+var seen = new HashSet<HashSet<Cell>>(HashSet<Cell>.CreateSetComparer());
+
+Every time Step generates a new set, I'd check to see if it is part of seen and if it is, I know I've found a cycle and can abort early for a Finalize call.  Otherwise, I'd add to seen.
+
+The CreateSetComparer() is needed so that the contents of the set are compared rather than just the reference.

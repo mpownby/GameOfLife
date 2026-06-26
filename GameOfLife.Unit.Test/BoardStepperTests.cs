@@ -210,5 +210,47 @@ namespace GameOfLife.Unit.Test
         ];
 
         #endregion
+
+        #region Coordinate wraparound (intentional 64-bit overflow behavior)
+
+        // Coordinates are signed 64-bit, and we DELIBERATELY let the stepper's neighbor arithmetic
+        // (cell.X +/- 1) overflow/underflow rather than guard or clamp it: long.MaxValue and
+        // long.MinValue are treated as adjacent, so the board behaves like a torus at the extreme
+        // edges instead of throwing. C#'s default unchecked arithmetic gives us exactly this (the
+        // project does not enable CheckForOverflowUnderflow). The README's design log flagged this
+        // as something to test on purpose rather than leave as a "big question mark"; this is that
+        // test. It also acts as a regression guard — if someone ever switches the build to checked
+        // arithmetic, Step would throw at the edge and this test would fail loudly.
+        [Test]
+        public void Step_BlinkerStraddlingTheIntegerSeam_OscillatesAsIfCoordinatesWrap()
+        {
+            // A horizontal blinker whose three cells straddle the +X seam: long.MaxValue - 1,
+            // long.MaxValue, and then long.MaxValue + 1 which overflows to long.MinValue. Those
+            // three are contiguous on the wrapped number line, so this is a normal blinker that
+            // happens to sit exactly on the overflow boundary.
+            var blinker = new HashSet<Cell>
+            {
+                new(long.MaxValue - 1, 0),
+                new(long.MaxValue, 0),
+                new(long.MinValue, 0),     // == long.MaxValue + 1, wrapped
+            };
+
+            HashSet<Cell> actual = _service.Step(blinker);
+
+            // A blinker pivots a horizontal bar into a vertical one centered on its middle cell
+            // (x == long.MaxValue). Getting this exact result proves the cells at MaxValue and
+            // MinValue were counted as neighbors of each other — i.e. the seam wrapped cleanly and
+            // did not corrupt the step.
+            var expected = new HashSet<Cell>
+            {
+                new(long.MaxValue, -1),
+                new(long.MaxValue, 0),
+                new(long.MaxValue, 1),
+            };
+
+            Assert.That(actual.SetEquals(expected), Is.True);
+        }
+
+        #endregion
     }
 }

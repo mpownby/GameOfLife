@@ -15,9 +15,4 @@
     <PackageReference Include="Swashbuckle.AspNetCore.Annotations" Version="10.2.3" />
   </ItemGroup>
 
-  <!-- Domain model folder is still empty; declared so it shows in the IDE. Remove once it has a file. -->
-  <ItemGroup>
-    <Folder Include="Data\Model\" />
-  </ItemGroup>
-
 </Project>

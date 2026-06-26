@@ -11,6 +11,16 @@ public class BoardService : IBoardService
     private readonly IBoardRepository _boardRepository;
     private readonly IBoardStepper _boardStepper;
 
+    // Guards the read-modify-write sequences in IterateNSteps/FinalizeBoard. The repository makes
+    // each GetExistingBoard/UpdateExistingBoard call individually thread-safe, but advancing a
+    // board is a COMPOUND read -> step -> write. Without this lock, two concurrent requests on the
+    // same board could both read the same generation, both step, and the second write would clobber
+    // the first (a lost update). The service is registered as a singleton precisely so this single
+    // lock instance is shared across all requests. The lock is intentionally coarse — it serializes
+    // across ALL boards, not per-id — which is fine at this scale; a per-id lock would be the next
+    // step if contention on distinct boards ever mattered.
+    private readonly object _lock = new();
+
     public BoardService(IBoardRepository boardRepository, IBoardStepper boardStepper)
     {
         _boardRepository = boardRepository;
@@ -65,28 +75,33 @@ public class BoardService : IBoardService
         // current state); a negative count almost certainly signals a caller bug.
         ArgumentOutOfRangeException.ThrowIfNegative(iterationCount);
 
-        BoardState state = this._boardRepository.GetExistingBoard(id);
-
-        int iterations = 0;
-
-        // using 'while' here instead of 'for' to leave room for future cycle detection which could drastically optimize this method if a large iteration count is supplied.
-        // (currently out of scope)
-        while (iterations < iterationCount)
+        // Hold the lock across the whole read-modify-write so two concurrent advances on the same
+        // board can't lose each other's updates. See the _lock comment for why this is shared.
+        lock (_lock)
         {
-            state.CurrentState = this._boardStepper.Step(state.CurrentState);
-            iterations++;
+            BoardState state = this._boardRepository.GetExistingBoard(id);
+
+            int iterations = 0;
+
+            // using 'while' here instead of 'for' to leave room for future cycle detection which could drastically optimize this method if a large iteration count is supplied.
+            // (currently out of scope)
+            while (iterations < iterationCount)
+            {
+                state.CurrentState = this._boardStepper.Step(state.CurrentState);
+                iterations++;
+            }
+
+            state.IterationCount += iterations;
+
+            // Persist only when we actually advanced the board. 0 iterations is a quirky-but-valid
+            // way to just read the current state, so it does no work and writes nothing.
+            if (iterations > 0)
+            {
+                this._boardRepository.UpdateExistingBoard(id, state);
+            }
+
+            return state;
         }
-
-        state.IterationCount += iterations;
-
-        // Persist only when we actually advanced the board. 0 iterations is a quirky-but-valid
-        // way to just read the current state, so it does no work and writes nothing.
-        if (iterations > 0)
-        {
-            this._boardRepository.UpdateExistingBoard(id, state);
-        }
-
-        return state;
     }
 
     public BoardState FinalizeBoard(int id, int maxIterationCount)
@@ -95,40 +110,45 @@ public class BoardService : IBoardService
         // "don't even try", and falls through to the did-not-conclude path below.)
         ArgumentOutOfRangeException.ThrowIfNegative(maxIterationCount);
 
-        BoardState state = this._boardRepository.GetExistingBoard(id);
-
-        int iterations = 0;
-
-        while (iterations < maxIterationCount)
+        // Hold the lock across the whole read-modify-write so two concurrent finalizes (or a
+        // finalize racing a step) on the same board can't lose each other's updates.
+        lock (_lock)
         {
-            HashSet<Cell> setNew = this._boardStepper.Step(state.CurrentState);
+            BoardState state = this._boardRepository.GetExistingBoard(id);
 
-            iterations++;
+            int iterations = 0;
 
-            // we want to persist the changes, but for performance reasons we'll only persist right before returning or throwing
-
-            // if the set hasn't changed, it means we've reached conclusion
-            if (setNew.SetEquals(state.CurrentState))
+            while (iterations < maxIterationCount)
             {
-                state.IterationCount += iterations;
-                this._boardRepository.UpdateExistingBoard(id, state);
-                return state;
+                HashSet<Cell> setNew = this._boardStepper.Step(state.CurrentState);
+
+                iterations++;
+
+                // we want to persist the changes, but for performance reasons we'll only persist right before returning or throwing
+
+                // if the set hasn't changed, it means we've reached conclusion
+                if (setNew.SetEquals(state.CurrentState))
+                {
+                    state.IterationCount += iterations;
+                    this._boardRepository.UpdateExistingBoard(id, state);
+                    return state;
+                }
+
+                state.CurrentState = setNew;
+
+                // TODO : add cycle detection to fail faster
             }
 
-            state.CurrentState = setNew;
+            // if we get this far, it means that we reached no conclusion by the caller's criteria, so we fail
 
-            // TODO : add cycle detection to fail faster
+            // no need to persist if we didn't change any state
+            if (iterations > 0)
+            {
+                state.IterationCount += iterations;
+                this._boardRepository.UpdateExistingBoard(id, state);   // we want to persist in case the caller decides to retry finalization later with a more permissive threshold
+            }
+
+            throw new BoardDidNotConcludeException(id, maxIterationCount);
         }
-
-        // if we get this far, it means that we reached no conclusion by the caller's criteria, so we fail
-
-        // no need to persist if we didn't change any state
-        if (iterations > 0)
-        {
-            state.IterationCount += iterations;
-            this._boardRepository.UpdateExistingBoard(id, state);   // we want to persist in case the caller decides to retry finalization later with a more permissive threshold
-        }
-
-        throw new BoardDidNotConcludeException(id, maxIterationCount);
     }
 }

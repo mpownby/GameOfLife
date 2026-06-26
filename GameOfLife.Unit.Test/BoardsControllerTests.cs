@@ -56,6 +56,21 @@ public class BoardsControllerTests
     }
 
     [Test]
+    public void CreateBoard_NullLiveCells_ReturnsBadRequestAndDoesNotCreate()
+    {
+        // An explicit JSON null for the array (distinct from omitting it, which binds to empty).
+        var request = new CoordinateBoardRequest { LiveCells = null! };
+
+        var result = _controller.CreateBoard(request);
+
+        var badRequest = result as BadRequestObjectResult;
+        Assert.That(badRequest, Is.Not.Null);
+        var error = badRequest!.Value!.GetType().GetProperty("error")!.GetValue(badRequest.Value) as string;
+        Assert.That(error, Does.Contain("liveCells"));
+        _service.DidNotReceive().CreateNewBoard(Arg.Any<IReadOnlyCollection<Cell>>());
+    }
+
+    [Test]
     public void CreateBoard_MalformedPair_ReturnsBadRequestAndDoesNotCreate()
     {
         // Second pair has only one element, so it is not a valid [x, y] coordinate.
@@ -94,6 +109,21 @@ public class BoardsControllerTests
         _service.Received(1).CreateNewBoard(converted);
     }
 
+    [Test]
+    public void CreateBoardFromGrid_MalformedGrid_ReturnsBadRequestAndDoesNotCreate()
+    {
+        // A malformed grid (e.g. a null row) makes the service throw an ArgumentException; the
+        // controller's Run wrapper must map that to a clean 400 rather than an unhandled 500.
+        var request = new GridBoardRequest { Grid = [[true], null!] };
+        _service.ConvertGridToLiveCells(Arg.Any<bool[][]>())
+            .Throws(new ArgumentException("Grid row cannot be null."));
+
+        var result = _controller.CreateBoardFromGrid(request);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        _service.DidNotReceive().CreateNewBoard(Arg.Any<IReadOnlyCollection<Cell>>());
+    }
+
     // ---------------------------------------------------------------------
     // GetBoard / GetNextState / GetStateAfterSteps — read & step endpoints
     // ---------------------------------------------------------------------
@@ -122,12 +152,12 @@ public class BoardsControllerTests
     }
 
     [Test]
-    public void GetNextState_AdvancesOneStepAndReturnsOk()
+    public void AdvanceOneStep_AdvancesOneStepAndReturnsOk()
     {
         var state = new BoardState { IterationCount = 1 };
         _service.IterateNSteps(4, 1).Returns(state);
 
-        var result = _controller.GetNextState(4);
+        var result = _controller.AdvanceOneStep(4);
 
         var ok = result as OkObjectResult;
         Assert.That(ok, Is.Not.Null);
@@ -136,22 +166,22 @@ public class BoardsControllerTests
     }
 
     [Test]
-    public void GetNextState_UnknownId_ReturnsNotFound()
+    public void AdvanceOneStep_UnknownId_ReturnsNotFound()
     {
         _service.IterateNSteps(99, 1).Throws(new KeyNotFoundException("No board exists with id 99."));
 
-        var result = _controller.GetNextState(99);
+        var result = _controller.AdvanceOneStep(99);
 
         Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
     }
 
     [Test]
-    public void GetStateAfterSteps_AdvancesRequestedStepsAndReturnsOk()
+    public void AdvanceNSteps_AdvancesRequestedStepsAndReturnsOk()
     {
         var state = new BoardState { IterationCount = 10 };
         _service.IterateNSteps(2, 10).Returns(state);
 
-        var result = _controller.GetStateAfterSteps(2, 10);
+        var result = _controller.AdvanceNSteps(2, 10);
 
         var ok = result as OkObjectResult;
         Assert.That(ok, Is.Not.Null);
@@ -160,21 +190,21 @@ public class BoardsControllerTests
     }
 
     [Test]
-    public void GetStateAfterSteps_UnknownId_ReturnsNotFound()
+    public void AdvanceNSteps_UnknownId_ReturnsNotFound()
     {
         _service.IterateNSteps(99, 5).Throws(new KeyNotFoundException("No board exists with id 99."));
 
-        var result = _controller.GetStateAfterSteps(99, 5);
+        var result = _controller.AdvanceNSteps(99, 5);
 
         Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
     }
 
     [Test]
-    public void GetStateAfterSteps_NegativeSteps_ReturnsBadRequest()
+    public void AdvanceNSteps_NegativeSteps_ReturnsBadRequest()
     {
         _service.IterateNSteps(1, -1).Throws(new ArgumentOutOfRangeException("iterationCount"));
 
-        var result = _controller.GetStateAfterSteps(1, -1);
+        var result = _controller.AdvanceNSteps(1, -1);
 
         Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
     }

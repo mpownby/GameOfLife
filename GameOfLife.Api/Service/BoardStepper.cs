@@ -15,16 +15,26 @@ public class BoardStepper : IBoardStepper
         var dictNeighborCount = new Dictionary<Cell, int>();
 
         // create the dictionary
-        foreach (Cell cell in liveCells)
+        //
+        // The coordinate math below is deliberately `unchecked`: at the extreme edges of the signed
+        // 64-bit space, cell.X + 1 (or - 1) overflows, and we WANT it to wrap (long.MaxValue and
+        // long.MinValue are treated as adjacent — a torus) rather than throw. Default C# arithmetic
+        // is already unchecked, but stating it explicitly makes the intent local and keeps the
+        // behavior correct even if the build is ever switched to checked arithmetic project-wide.
+        // (See the wraparound test in BoardStepperTests.)
+        unchecked
         {
-            IncrementNeighborCount(new Cell(cell.X - 1, cell.Y), dictNeighborCount);    // left
-            IncrementNeighborCount(new Cell(cell.X - 1, cell.Y - 1), dictNeighborCount);    // upper-left
-            IncrementNeighborCount(new Cell(cell.X, cell.Y - 1), dictNeighborCount);    // top
-            IncrementNeighborCount(new Cell(cell.X + 1, cell.Y - 1), dictNeighborCount);    // upper-right
-            IncrementNeighborCount(new Cell(cell.X + 1, cell.Y), dictNeighborCount);    // right
-            IncrementNeighborCount(new Cell(cell.X + 1, cell.Y + 1), dictNeighborCount);    // lower-right
-            IncrementNeighborCount(new Cell(cell.X, cell.Y + 1), dictNeighborCount);    // bottom
-            IncrementNeighborCount(new Cell(cell.X - 1, cell.Y + 1), dictNeighborCount);    // lower-left
+            foreach (Cell cell in liveCells)
+            {
+                IncrementNeighborCount(new Cell(cell.X - 1, cell.Y), dictNeighborCount);    // left
+                IncrementNeighborCount(new Cell(cell.X - 1, cell.Y - 1), dictNeighborCount);    // upper-left
+                IncrementNeighborCount(new Cell(cell.X, cell.Y - 1), dictNeighborCount);    // top
+                IncrementNeighborCount(new Cell(cell.X + 1, cell.Y - 1), dictNeighborCount);    // upper-right
+                IncrementNeighborCount(new Cell(cell.X + 1, cell.Y), dictNeighborCount);    // right
+                IncrementNeighborCount(new Cell(cell.X + 1, cell.Y + 1), dictNeighborCount);    // lower-right
+                IncrementNeighborCount(new Cell(cell.X, cell.Y + 1), dictNeighborCount);    // bottom
+                IncrementNeighborCount(new Cell(cell.X - 1, cell.Y + 1), dictNeighborCount);    // lower-left
+            }
         }
 
         // now create the new cell set based on the dictionary counts
