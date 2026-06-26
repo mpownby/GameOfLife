@@ -6,16 +6,16 @@ namespace GameOfLife.Unit.Test;
 [TestFixture]
 public class BoardRepositoryUsingFileSystemTests
 {
-    private IBoardStateStore _store = null!;
+    private IFileIOPassThrough _fileIO = null!;
 
     [SetUp]
     public void SetUp()
     {
-        _store = Substitute.For<IBoardStateStore>();
-        _store.Load().Returns((string?)null);   // start empty unless a test says otherwise
+        _fileIO = Substitute.For<IFileIOPassThrough>();
+        _fileIO.Exists(Arg.Any<string>()).Returns(false);   // no persisted file unless a test says otherwise
     }
 
-    private BoardRepositoryUsingFileSystem CreateRepository() => new(_store);
+    private BoardRepositoryUsingFileSystem CreateRepository(string path = "boards.json") => new(_fileIO, path);
 
     private static BoardState StateWith(params Cell[] cells) => new()
     {
@@ -23,6 +23,63 @@ public class BoardRepositoryUsingFileSystemTests
         CurrentState = new HashSet<Cell>(cells),
         IterationCount = 0
     };
+
+    // ---------------------------------------------------------------------
+    // Construction
+    // ---------------------------------------------------------------------
+
+    [Test]
+    public void Constructor_NullFileIO_ThrowsArgumentNullException()
+    {
+        Assert.Throws<ArgumentNullException>(() => new BoardRepositoryUsingFileSystem(null!, "boards.json"));
+    }
+
+    [Test]
+    public void Constructor_BlankPath_ThrowsArgumentException()
+    {
+        Assert.Throws<ArgumentException>(() => new BoardRepositoryUsingFileSystem(_fileIO, "  "));
+    }
+
+    [Test]
+    public void Constructor_EnsuresTargetDirectoryExists()
+    {
+        CreateRepository(Path.Combine("data", "boards.json"));
+
+        _fileIO.Received().CreateDirectory(Arg.Any<string>());
+    }
+
+    [Test]
+    public void Constructor_NoExistingFile_StartsEmpty()
+    {
+        var repo = CreateRepository();
+
+        // first board created in an empty repo gets id 0
+        Assert.That(repo.CreateNewBoard(StateWith(new Cell(0, 0))), Is.EqualTo(0));
+        _fileIO.DidNotReceive().ReadAllText(Arg.Any<string>());
+    }
+
+    [Test]
+    public void Constructor_LoadsPersistedBoards_RoundTripThroughJson()
+    {
+        // First repository persists a board; capture the JSON it writes.
+        string? written = null;
+        _fileIO.When(f => f.WriteAllText(Arg.Any<string>(), Arg.Any<string>()))
+               .Do(ci => written = ci.ArgAt<string>(1));
+        var first = CreateRepository();
+        var id = first.CreateNewBoard(StateWith(new Cell(7, 8)));
+
+        // A brand-new repository whose file layer hands back that JSON must rebuild the same board.
+        var reloadFileIO = Substitute.For<IFileIOPassThrough>();
+        reloadFileIO.Exists(Arg.Any<string>()).Returns(true);
+        reloadFileIO.ReadAllText(Arg.Any<string>()).Returns(written);
+        var second = new BoardRepositoryUsingFileSystem(reloadFileIO, "boards.json");
+
+        Assert.That(second.GetExistingBoard(id).InitialState, Is.EquivalentTo(new[] { new Cell(7, 8) }));
+    }
+
+    // ---------------------------------------------------------------------
+    // CreateNewBoard
+    // ---------------------------------------------------------------------
 
     [Test]
     public void CreateNewBoard_AssignsSequentialIdsStartingAtZero()
@@ -35,13 +92,17 @@ public class BoardRepositoryUsingFileSystemTests
     }
 
     [Test]
-    public void CreateNewBoard_PersistsToStore()
+    public void CreateNewBoard_PersistsAtomically_WritesTempThenMovesOverTarget()
     {
         var repo = CreateRepository();
 
         repo.CreateNewBoard(StateWith(new Cell(0, 0)));
 
-        _store.Received().Save(Arg.Any<string>());
+        Received.InOrder(() =>
+        {
+            _fileIO.WriteAllText(Arg.Any<string>(), Arg.Any<string>());
+            _fileIO.Move(Arg.Any<string>(), Arg.Any<string>(), true);
+        });
     }
 
     [Test]
@@ -51,6 +112,22 @@ public class BoardRepositoryUsingFileSystemTests
 
         Assert.Throws<ArgumentNullException>(() => repo.CreateNewBoard(null!));
     }
+
+    [Test]
+    public void CreateNewBoard_StoresIndependentCopyOfSource()
+    {
+        var repo = CreateRepository();
+        var src = StateWith(new Cell(0, 0));
+
+        var id = repo.CreateNewBoard(src);
+        src.CurrentState.Add(new Cell(9, 9));     // mutate the source after storing it
+
+        Assert.That(repo.GetExistingBoard(id).CurrentState, Does.Not.Contain(new Cell(9, 9)));
+    }
+
+    // ---------------------------------------------------------------------
+    // GetExistingBoard
+    // ---------------------------------------------------------------------
 
     [Test]
     public void GetExistingBoard_ReturnsStoredBoard()
@@ -75,18 +152,6 @@ public class BoardRepositoryUsingFileSystemTests
     }
 
     [Test]
-    public void CreateNewBoard_StoresIndependentCopyOfSource()
-    {
-        var repo = CreateRepository();
-        var src = StateWith(new Cell(0, 0));
-
-        var id = repo.CreateNewBoard(src);
-        src.CurrentState.Add(new Cell(9, 9));     // mutate the source after storing it
-
-        Assert.That(repo.GetExistingBoard(id).CurrentState, Does.Not.Contain(new Cell(9, 9)));
-    }
-
-    [Test]
     public void GetExistingBoard_InvalidId_ThrowsKeyNotFound()
     {
         var repo = CreateRepository();
@@ -95,12 +160,16 @@ public class BoardRepositoryUsingFileSystemTests
         Assert.Throws<KeyNotFoundException>(() => repo.GetExistingBoard(-1));
     }
 
+    // ---------------------------------------------------------------------
+    // UpdateExistingBoard
+    // ---------------------------------------------------------------------
+
     [Test]
     public void UpdateExistingBoard_ReplacesAndPersists()
     {
         var repo = CreateRepository();
         var id = repo.CreateNewBoard(StateWith(new Cell(0, 0)));
-        _store.ClearReceivedCalls();
+        _fileIO.ClearReceivedCalls();
 
         var updated = StateWith(new Cell(5, 5));
         updated.IterationCount = 3;
@@ -109,7 +178,7 @@ public class BoardRepositoryUsingFileSystemTests
         var board = repo.GetExistingBoard(id);
         Assert.That(board.CurrentState, Is.EquivalentTo(new[] { new Cell(5, 5) }));
         Assert.That(board.IterationCount, Is.EqualTo(3));
-        _store.Received().Save(Arg.Any<string>());
+        _fileIO.Received().WriteAllText(Arg.Any<string>(), Arg.Any<string>());
     }
 
     [Test]
@@ -128,22 +197,5 @@ public class BoardRepositoryUsingFileSystemTests
         var id = repo.CreateNewBoard(StateWith(new Cell(0, 0)));
 
         Assert.Throws<ArgumentNullException>(() => repo.UpdateExistingBoard(id, null!));
-    }
-
-    [Test]
-    public void Constructor_LoadsPersistedBoards_RoundTripThroughJson()
-    {
-        // First repository persists a board; capture the JSON it writes to the store.
-        string? savedJson = null;
-        _store.When(s => s.Save(Arg.Any<string>())).Do(ci => savedJson = ci.Arg<string>());
-        var first = CreateRepository();
-        var id = first.CreateNewBoard(StateWith(new Cell(7, 8)));
-
-        // A brand-new repository whose store hands back that JSON must rebuild the same board.
-        var reloadStore = Substitute.For<IBoardStateStore>();
-        reloadStore.Load().Returns(savedJson);
-        var second = new BoardRepositoryUsingFileSystem(reloadStore);
-
-        Assert.That(second.GetExistingBoard(id).InitialState, Is.EquivalentTo(new[] { new Cell(7, 8) }));
     }
 }
