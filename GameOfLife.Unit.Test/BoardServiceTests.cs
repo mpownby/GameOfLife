@@ -17,6 +17,7 @@ public class BoardServiceTests
         _service = new BoardService(_repository);
     }
 
+    #region CreateNewBoard
     // ---------------------------------------------------------------------
     // CreateNewBoard
     // ---------------------------------------------------------------------
@@ -96,6 +97,10 @@ public class BoardServiceTests
     {
         Assert.Throws<ArgumentNullException>(() => _service.CreateNewBoard(null!));
     }
+
+    #endregion
+
+    #region ConvertGridToLiveCells
 
     // ---------------------------------------------------------------------
     // ConvertGridToLiveCells
@@ -185,6 +190,32 @@ public class BoardServiceTests
         Assert.Throws<ArgumentException>(() => _service.ConvertGridToLiveCells(grid));
     }
 
+    #endregion
+
+    #region Still Lifes
+
+    [Test]
+    public void FinalizeBoard_StillLifeBlock_ConcludesAfterOneIteration()
+    {
+        int id = 1234;  // arbitrary id
+        Cell[] cells = [new Cell(0, 0), new Cell(1, 0), new Cell(0, 1), new Cell(1, 1)];
+
+        _repository.GetExistingBoard(id).Returns(CellsToBoardState(cells));
+
+        // A still life is unchanged, so the final state is the same cells after exactly one
+        // algorithm run (the run that confirms nothing changed).
+        var expected = CellsToBoardState(cells, iterationCount: 1);
+
+        // setting max iterations to 10 so that we aren't testing two things at the same time (whether budget is big enough and the actual iteration count).
+        // For this test, we only want to test that the actual iteration count is correct.  Testing the max budget will be handled in other tests.
+        BoardState actual = _service.FinalizeBoard(id, 10);
+
+        Assert.That(actual, Is.EqualTo(expected).Using<BoardState>(BoardStatesEqual));
+        _repository.Received(1).UpdateExistingBoard(id, Arg.Is<BoardState>(s => BoardStatesEqual(s, expected)));
+    }
+
+    #endregion
+
     // ---------------------------------------------------------------------
     // Helpers
     // ---------------------------------------------------------------------
@@ -199,4 +230,26 @@ public class BoardServiceTests
         _repository.CreateNewBoard(Arg.Do<BoardState>(s => captured = s)).Returns(returnId);
         return () => captured;
     }
+
+    private BoardState CellsToBoardState(Cell[] cells, int iterationCount = 0)
+    {
+        var result = new BoardState
+        {
+            InitialState = new HashSet<Cell>(cells),
+            CurrentState = new HashSet<Cell>(cells),
+            IterationCount = iterationCount
+        };
+
+        return result;
+    }
+
+    /// <summary>
+    /// Value comparison for two board states: same iteration count and the same set of live cells
+    /// in both their initial and current states. Lives here rather than on BoardState so the
+    /// domain type doesn't have to carry a mutable GetHashCode just to support equality.
+    /// </summary>
+    private static bool BoardStatesEqual(BoardState a, BoardState b) =>
+        a.IterationCount == b.IterationCount
+        && a.InitialState.SetEquals(b.InitialState)
+        && a.CurrentState.SetEquals(b.CurrentState);
 }
