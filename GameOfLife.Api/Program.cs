@@ -18,8 +18,10 @@ internal class Program
         builder.Services.AddSwaggerGen();
 
         // Dependency Injection: wire each layer to its interface.
-        //   - Repository is a Singleton: a single shared persistence store.
+        //   - The board store (file I/O) and repository are Singletons: one shared store.
         //   - Service is Scoped: per-request; holds no long-lived state of its own.
+        builder.Services.AddSingleton<IBoardStateStore>(_ =>
+            new FileBoardStateStore(Path.Combine(builder.Environment.ContentRootPath, "boarddata", "boards.json")));
         builder.Services.AddSingleton<IBoardRepository, BoardRepositoryUsingFileSystem>();
         builder.Services.AddScoped<IBoardService, BoardService>();
 

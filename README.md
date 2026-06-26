@@ -50,3 +50,21 @@ Since the request objects can be used by both the web and service layer, I'm mov
 ## Board state
 
 I'm thinking we should store both the initial and current state as well as the number of iterations that have elapsed.  While the current state could be inferred from the initial state and the iteration count, there is a performance cost to replay the iterations every time (and disk space is cheap) and even more importantly if we have the current state, we can dianose problems with our algorithm (or confirm that it's working correctly) which we would not be able to do otherwise.
+
+## Started implementing service layer, finished controller and data layer can be done in parallel.
+
+I implemented a few methods in service layer, had Claude audit and write unit tests for them.
+I had Claude implement controller methods and write unit tests for them.
+Now I'm having Claude work on the data layer while I work on the service layer some more (I'm working on this part myself so ensure I have a very solid understanding of the algorithm and architecture; the web and data layers are more plumping than algorithms so it's okay to have Claude do them).
+
+Here's my prompt for Claude for the data layer:
+"Work on implementing BoardRepository whatever method is simple/clean.  I'm thinking maybe having a list of objects which can be referred to be index (hence the id that we return) and this list is serialized to JSON and written to a fixed file somewhere.  using locking so that there are no race conditions on the methods.  the read version can return what's cached in memory, the file system only needs to be touched on write and on construction when the file cache is initially read."
+
+Claude added three suggestions which I agree with:
+- The data layer's cache needs to be isolated from the web/service layer since it contains HashSets.  So instead of returning the data layer's actual cache, we need to return copies of the cache so that the other layers can't corrupt our cache.
+- Put actual File I/O behind another interface so it can be properly mocked out via unit tests.  I 100% agree and would've suggested this if Claude hadn't.
+- Atomic writes.  Instead of overwriting our authoritive file, write to a temp file, then do a move/replace.  This protects us against a crash during an overwrite.  Probably overkill for our simple implementation, but still a good idea to do.
+
+Claude suggests renaming BoardRepositoryUsingFileSystem back to BoardRepository since the file system part is handled by IBoardStateStore.  I disagree with this suggestion because BoardRepositoryUsingFileSystem is still serializing/deserializing JSON which is an implementataion detail specific to file system usage; we may not do this if we were using a database.  So I'm leaving BoardRepositoryUsingFileSystem named as-is.
+
+Claude created a test file called FileBoardStateStoreTests and put it in the unit test project.  This file hits the real file system so it's an integration test.  I have a firm rule that tests labeled as unit tests must actually be unit tests, not integration tests masquerading as unit tests.  I'm having Claude move this file out of the unit test project and into a new integration test project.
