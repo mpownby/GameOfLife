@@ -77,3 +77,8 @@ Claude didn't design FileBoardStateStore like this, so I am having Claude refact
 
 Prompt I gave to Claude to make this change:
 'FileBoardStateStore is difficult (impossible) to properly unit test.  I want this refactored so that we have IFileIOPassThrough interface and a FileIOPassThrough class.  IFileIOPassThrough will contain methods like "void WriteAllText(string path, string? contents);" and FileIOPassThrough will implement these methods like "void WriteAllText(string path, string? contents) { File.WriteAllText(path, contents); }"  The point is that the implementation will have no additional logic, it will simply provide a layer of abstraction to convert a static call into an abstract/interface call so it can be mocked out.  After you make this change, all of the logic that is currently in FileBoardStateStore should be moved into BoardRepositoryUsingFileSystem which should take a dependency to IFileIOPassThrough.  And FileBoardStateStore can be retired as it will no longer be needed (as can its integration test).  Does this make sense?'
+
+## BoardService implementation mostly complete now
+
+The implementation for the methods in this class are mostly complete.
+I am noticing that I have a method called GetStateAfterIterations which is misnamed since this method actually is intended to persist changes in case we need to recover from a crash or resume.  Renaming method to IterateNSteps to be more clear.

@@ -61,7 +61,7 @@ public class BoardsController : ControllerBase
     [HttpGet("{id}")]
     public ActionResult GetBoard(int id)
     {
-        BoardState state = _boardService.GetStateAfterIterations(id, 0);
+        BoardState state = _boardService.IterateNSteps(id, 0);
         return Ok(state);
     }
 }

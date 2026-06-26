@@ -194,10 +194,10 @@ public class BoardServiceTests
 
     #endregion
 
-    #region Still Lifes
+    #region Concluding boards
 
     [Test]
-    public void FinalizeBoard_StillLifeBlock_ConcludesAfterOneIteration()
+    public void FinalizeBoard_Settles_ConcludesAfterOneIteration()
     {
         int id = 1234;  // arbitrary id
         Cell[] cells = [new Cell(0, 0), new Cell(1, 0), new Cell(0, 1), new Cell(1, 1)];    // arbitrary cells, since we mock the Step method
@@ -252,6 +252,82 @@ public class BoardServiceTests
         _stepper.Received(maxIterations).Step(Arg.Any<IReadOnlySet<Cell>>());
         // ...and progress is persisted before giving up, so a later retry with a bigger budget can resume.
         _repository.Received(1).UpdateExistingBoard(id, Arg.Is<BoardState>(s => s.IterationCount == maxIterations));
+    }
+
+    [Test]
+    public void FinalizeBoard_NegativeMaxIterations_ThrowsArgumentOutOfRangeException()
+    {
+        // A negative budget is a caller bug; fail fast rather than doing any work or I/O.
+        Assert.Throws<ArgumentOutOfRangeException>(() => _service.FinalizeBoard(7, -1));
+        _repository.DidNotReceive().GetExistingBoard(Arg.Any<int>());   // validated before any I/O
+    }
+
+    #endregion
+
+    #region IterateNSteps
+
+    [Test]
+    public void IterateNSteps_ZeroIterations_ReturnsCurrentStateWithoutSteppingOrPersisting()
+    {
+        // This is the read path used by the controller's GetBoard endpoint: 0 steps must be a
+        // pure read — never invoke the stepper, never change the iteration count, never persist.
+        int id = 7;
+        Cell[] cells = [new Cell(0, 0), new Cell(1, 0)];
+        _repository.GetExistingBoard(id).Returns(CellsToBoardState(cells, iterationCount: 4));
+
+        BoardState result = _service.IterateNSteps(id, 0);
+
+        _stepper.DidNotReceive().Step(Arg.Any<IReadOnlySet<Cell>>());
+        _repository.DidNotReceive().UpdateExistingBoard(Arg.Any<int>(), Arg.Any<BoardState>());
+        Assert.That(result.CurrentState, Is.EquivalentTo(cells));
+        Assert.That(result.IterationCount, Is.EqualTo(4));   // unchanged
+    }
+
+    [Test]
+    public void IterateNSteps_AdvancesByCount_AccumulatingOntoExistingIterationCount()
+    {
+        // The board has already been advanced 3 times; asking for 2 more must land it at 5,
+        // and the returned state must be the LAST generation Step produced.
+        int id = 7;
+        Cell[] start = [new Cell(0, 0)];
+        _repository.GetExistingBoard(id).Returns(CellsToBoardState(start, iterationCount: 3));
+
+        HashSet<Cell> gen1 = [new Cell(1, 1)];
+        HashSet<Cell> gen2 = [new Cell(2, 2)];
+        // Step is mocked to emit a fixed sequence of generations, one per call.
+        _stepper.Step(Arg.Any<IReadOnlySet<Cell>>()).Returns(gen1, gen2);
+
+        BoardState result = _service.IterateNSteps(id, 2);
+
+        _stepper.Received(2).Step(Arg.Any<IReadOnlySet<Cell>>());
+        Assert.That(result.CurrentState, Is.EquivalentTo(gen2));   // ends on the final generation
+        Assert.That(result.IterationCount, Is.EqualTo(5));         // 3 existing + 2 new
+    }
+
+    [Test]
+    public void IterateNSteps_WhenAdvancing_PersistsAdvancedState()
+    {
+        // Advancing one or more steps moves the board forward, so the new state must be written
+        // back to the repository (the rename to IterateNSteps reflects that this commits).
+        int id = 7;
+        _repository.GetExistingBoard(id).Returns(CellsToBoardState([new Cell(0, 0)], iterationCount: 2));
+        HashSet<Cell> next = [new Cell(1, 1)];
+        _stepper.Step(Arg.Any<IReadOnlySet<Cell>>()).Returns(next);
+
+        _service.IterateNSteps(id, 1);
+
+        // Persisted exactly once, with the advanced cells and bumped iteration count.
+        _repository.Received(1).UpdateExistingBoard(
+            id,
+            Arg.Is<BoardState>(s => s.CurrentState.SetEquals(next) && s.IterationCount == 3));
+    }
+
+    [Test]
+    public void IterateNSteps_NegativeIterations_ThrowsArgumentOutOfRangeException()
+    {
+        // A negative count is a caller bug; fail fast rather than silently treating it as 0.
+        Assert.Throws<ArgumentOutOfRangeException>(() => _service.IterateNSteps(7, -1));
+        _repository.DidNotReceive().GetExistingBoard(Arg.Any<int>());   // validated before any I/O
     }
 
     #endregion

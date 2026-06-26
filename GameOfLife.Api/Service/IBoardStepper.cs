@@ -6,7 +6,7 @@ namespace GameOfLife.Api.Service;
 /// Owns the single-generation Game of Life rule: given the current live cells,
 /// produce the live cells of the next generation. Lives behind its own interface
 /// because the stepping logic has multiple branches (neighbour counting, birth/survival
-/// rules, boundary handling) and both <see cref="IBoardService.GetStateAfterIterations"/>
+/// rules, boundary handling) and both <see cref="IBoardService.IterateNSteps"/>
 /// and <see cref="IBoardService.FinalizeBoard"/> depend on it.
 /// </summary>
 public interface IBoardStepper

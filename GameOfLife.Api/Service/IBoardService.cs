@@ -27,13 +27,14 @@ public interface IBoardService
     IReadOnlyCollection<Cell> ConvertGridToLiveCells(bool[][] grid);
 
     /// <summary>
-    /// Advance the board by iterationCount and return the new state.
-    /// Passing in 0 iterations will just return the current state.
+    /// Advance the board by <paramref name="iterationCount"/> steps, persist the advanced state,
+    /// and return it. Passing 0 is a quirky-but-valid way to read the current state without
+    /// iterating; in that case nothing is persisted.
     /// </summary>
     /// <param name="id">The id of the board.</param>
-    /// <param name="iterationCount">How many iterations to advance the board.</param>
+    /// <param name="iterationCount">How many iterations to advance the board. Must be non-negative.</param>
     /// <returns>The board state after it has advanced.</returns>
-    BoardState GetStateAfterIterations(int id, int iterationCount);
+    BoardState IterateNSteps(int id, int iterationCount);
 
     /// <summary>
     /// Drives the board to a final state.
