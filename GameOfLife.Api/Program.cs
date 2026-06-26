@@ -48,8 +48,14 @@ internal class Program
         app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 
         Console.WriteLine("Starting Game of Life API...");
-        Console.WriteLine("  Swagger UI: /swagger");
-        Console.WriteLine("  GET /health - Health check");
+        Console.WriteLine("  Swagger UI:                      /swagger");
+        Console.WriteLine("  GET  /health                     - Health check");
+        Console.WriteLine("  POST /api/boards                 - Upload a board (sparse [x, y] pairs), returns id");
+        Console.WriteLine("  POST /api/boards/from-grid       - Upload a board (dense grid), returns id");
+        Console.WriteLine("  GET  /api/boards/{id}            - Get a board's current state");
+        Console.WriteLine("  POST /api/boards/{id}/next       - Advance one step");
+        Console.WriteLine("  POST /api/boards/{id}/states/{n} - Advance n steps");
+        Console.WriteLine("  POST /api/boards/{id}/final      - Step until settled (?maxIterations=N, default 1000)");
 
         app.Run();
     }

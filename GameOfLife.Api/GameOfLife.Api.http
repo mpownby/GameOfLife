@@ -1,12 +1,31 @@
 @GameOfLife_HostAddress = http://localhost:5041
+@boardId = 0
 
 ### Health check
 GET {{GameOfLife_HostAddress}}/health
 Accept: application/json
 
-###
-# TODO: add requests here as you build endpoints, e.g.
-#   POST {{GameOfLife_HostAddress}}/api/boards          (upload a new board, returns id)
-#   GET  {{GameOfLife_HostAddress}}/api/boards/{id}/next
-#   GET  {{GameOfLife_HostAddress}}/api/boards/{id}/states/{steps}
-#   GET  {{GameOfLife_HostAddress}}/api/boards/{id}/final?maxAttempts=1000
+### Upload a board as sparse [x, y] pairs (a blinker). Returns the new id.
+POST {{GameOfLife_HostAddress}}/api/boards
+Content-Type: application/json
+
+{ "liveCells": [[0, 0], [1, 0], [2, 0]] }
+
+### Upload a board as a dense grid (a 2x2 block). Returns the new id.
+POST {{GameOfLife_HostAddress}}/api/boards/from-grid
+Content-Type: application/json
+
+{ "grid": [[true, true], [true, true]] }
+
+### Get a board's current state (safe, side-effect-free read).
+GET {{GameOfLife_HostAddress}}/api/boards/{{boardId}}
+Accept: application/json
+
+### Advance the board one step (POST: mutates and persists the board's state).
+POST {{GameOfLife_HostAddress}}/api/boards/{{boardId}}/next
+
+### Advance the board N steps (here: 5).
+POST {{GameOfLife_HostAddress}}/api/boards/{{boardId}}/states/5
+
+### Drive the board to its settled/final state; returns 422 if it doesn't settle within maxIterations.
+POST {{GameOfLife_HostAddress}}/api/boards/{{boardId}}/final?maxIterations=1000
