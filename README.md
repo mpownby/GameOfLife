@@ -4,8 +4,6 @@ The Game Of Life ( https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life )
 # TODO
 
 - Run test suite through Styker to get > 80% mutation score
-- Write tests for controller to ensure proper status codes are being returned (404 if not found, for example)
-- Add swagger annotations for a more user-friendly experience
 
 # Architectural decision log
 

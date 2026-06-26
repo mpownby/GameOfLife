@@ -10,6 +10,9 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
+    <!-- Lets us document each endpoint with [SwaggerOperation]/[SwaggerResponse] attributes
+         inline at the method, instead of compiling XML doc comments into a separate .xml file. -->
+    <PackageReference Include="Swashbuckle.AspNetCore.Annotations" Version="10.2.3" />
   </ItemGroup>
 
   <!-- Domain model folder is still empty; declared so it shows in the IDE. Remove once it has a file. -->

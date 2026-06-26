@@ -1,7 +1,9 @@
 using GameOfLife.Api.Data.Objects;
 using GameOfLife.Api.Service;
 using GameOfLife.Api.Web;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using NSubstitute.ExceptionExtensions;
 
 namespace GameOfLife.Unit.Test;
 
@@ -86,5 +88,141 @@ public class BoardsControllerTests
         Assert.That(created.RouteValues!["id"], Is.EqualTo(11));
         _service.Received(1).ConvertGridToLiveCells(grid);
         _service.Received(1).CreateNewBoard(converted);
+    }
+
+    // ---------------------------------------------------------------------
+    // GetBoard / GetNextState / GetStateAfterSteps — read & step endpoints
+    // ---------------------------------------------------------------------
+
+    [Test]
+    public void GetBoard_ExistingBoard_ReturnsOkWithState()
+    {
+        var state = new BoardState { IterationCount = 7 };
+        _service.IterateNSteps(3, 0).Returns(state);
+
+        var result = _controller.GetBoard(3);
+
+        var ok = result as OkObjectResult;
+        Assert.That(ok, Is.Not.Null);
+        Assert.That(ok!.Value, Is.SameAs(state));
+    }
+
+    [Test]
+    public void GetBoard_UnknownId_ReturnsNotFound()
+    {
+        _service.IterateNSteps(99, 0).Throws(new KeyNotFoundException("No board exists with id 99."));
+
+        var result = _controller.GetBoard(99);
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    [Test]
+    public void GetNextState_AdvancesOneStepAndReturnsOk()
+    {
+        var state = new BoardState { IterationCount = 1 };
+        _service.IterateNSteps(4, 1).Returns(state);
+
+        var result = _controller.GetNextState(4);
+
+        var ok = result as OkObjectResult;
+        Assert.That(ok, Is.Not.Null);
+        Assert.That(ok!.Value, Is.SameAs(state));
+        _service.Received(1).IterateNSteps(4, 1);
+    }
+
+    [Test]
+    public void GetNextState_UnknownId_ReturnsNotFound()
+    {
+        _service.IterateNSteps(99, 1).Throws(new KeyNotFoundException("No board exists with id 99."));
+
+        var result = _controller.GetNextState(99);
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    [Test]
+    public void GetStateAfterSteps_AdvancesRequestedStepsAndReturnsOk()
+    {
+        var state = new BoardState { IterationCount = 10 };
+        _service.IterateNSteps(2, 10).Returns(state);
+
+        var result = _controller.GetStateAfterSteps(2, 10);
+
+        var ok = result as OkObjectResult;
+        Assert.That(ok, Is.Not.Null);
+        Assert.That(ok!.Value, Is.SameAs(state));
+        _service.Received(1).IterateNSteps(2, 10);
+    }
+
+    [Test]
+    public void GetStateAfterSteps_UnknownId_ReturnsNotFound()
+    {
+        _service.IterateNSteps(99, 5).Throws(new KeyNotFoundException("No board exists with id 99."));
+
+        var result = _controller.GetStateAfterSteps(99, 5);
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    [Test]
+    public void GetStateAfterSteps_NegativeSteps_ReturnsBadRequest()
+    {
+        _service.IterateNSteps(1, -1).Throws(new ArgumentOutOfRangeException("iterationCount"));
+
+        var result = _controller.GetStateAfterSteps(1, -1);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+    }
+
+    // ---------------------------------------------------------------------
+    // FinalizeBoard — settle-or-fail endpoint
+    // ---------------------------------------------------------------------
+
+    [Test]
+    public void FinalizeBoard_SettlesAndReturnsOk()
+    {
+        var state = new BoardState { IterationCount = 12 };
+        _service.FinalizeBoard(6, 1000).Returns(state);
+
+        var result = _controller.FinalizeBoard(6);
+
+        var ok = result as OkObjectResult;
+        Assert.That(ok, Is.Not.Null);
+        Assert.That(ok!.Value, Is.SameAs(state));
+    }
+
+    [Test]
+    public void FinalizeBoard_UnknownId_ReturnsNotFound()
+    {
+        _service.FinalizeBoard(99, Arg.Any<int>())
+            .Throws(new KeyNotFoundException("No board exists with id 99."));
+
+        var result = _controller.FinalizeBoard(99);
+
+        Assert.That(result, Is.InstanceOf<NotFoundObjectResult>());
+    }
+
+    [Test]
+    public void FinalizeBoard_DidNotConclude_ReturnsUnprocessableEntity()
+    {
+        _service.FinalizeBoard(8, 50).Throws(new BoardDidNotConcludeException(8, 50));
+
+        var result = _controller.FinalizeBoard(8, 50);
+
+        // 422 Unprocessable Entity: the request was well-formed but the board never settled.
+        var unprocessable = result as UnprocessableEntityObjectResult;
+        Assert.That(unprocessable, Is.Not.Null);
+        Assert.That(unprocessable!.StatusCode, Is.EqualTo(StatusCodes.Status422UnprocessableEntity));
+    }
+
+    [Test]
+    public void FinalizeBoard_NegativeBudget_ReturnsBadRequest()
+    {
+        _service.FinalizeBoard(1, -5).Throws(new ArgumentOutOfRangeException("maxIterationCount"));
+
+        var result = _controller.FinalizeBoard(1, -5);
+
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
     }
 }

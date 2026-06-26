@@ -15,7 +15,11 @@ internal class Program
         // Add services to the container
         builder.Services.AddControllers();
         builder.Services.AddEndpointsApiExplorer();
-        builder.Services.AddSwaggerGen();
+        builder.Services.AddSwaggerGen(options =>
+        {
+            // Pick up the inline [SwaggerOperation]/[SwaggerResponse] attributes on the controllers.
+            options.EnableAnnotations();
+        });
 
         // Dependency Injection: wire each layer to its interface.
         //   - The file-IO pass-through and repository are Singletons: one shared store.

@@ -5,6 +5,7 @@ namespace GameOfLife.Api.Data;
 /// forward to the corresponding static System.IO call — no logic lives here, which is why this
 /// class itself does not need (and cannot meaningfully have) unit tests.
 /// </summary>
+[ExcludeFromCodeCoverage]   // not unit testable
 public class FileIOPassThrough : IFileIOPassThrough
 {
     public bool Exists(string path) => File.Exists(path);
