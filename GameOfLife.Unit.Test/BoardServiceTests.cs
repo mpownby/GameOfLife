@@ -8,13 +8,15 @@ namespace GameOfLife.Unit.Test;
 public class BoardServiceTests
 {
     private IBoardRepository _repository = null!;
+    private IBoardStepper _stepper = null!;
     private BoardService _service = null!;
 
     [SetUp]
     public void SetUp()
     {
         _repository = Substitute.For<IBoardRepository>();
-        _service = new BoardService(_repository);
+        _stepper = Substitute.For<IBoardStepper>();
+        _service = new BoardService(_repository, _stepper);
     }
 
     #region CreateNewBoard
@@ -198,9 +200,14 @@ public class BoardServiceTests
     public void FinalizeBoard_StillLifeBlock_ConcludesAfterOneIteration()
     {
         int id = 1234;  // arbitrary id
-        Cell[] cells = [new Cell(0, 0), new Cell(1, 0), new Cell(0, 1), new Cell(1, 1)];
+        Cell[] cells = [new Cell(0, 0), new Cell(1, 0), new Cell(0, 1), new Cell(1, 1)];    // arbitrary cells, since we mock the Step method
 
         _repository.GetExistingBoard(id).Returns(CellsToBoardState(cells));
+
+        // A still life is unchanged by a step, so Step returns the same live cells it was given.
+        // (Step is mocked, so the specific cells are arbitrary — this test only exercises
+        // FinalizeBoard's control flow: it should conclude as soon as a step changes nothing.)
+        _stepper.Step(Arg.Any<IReadOnlySet<Cell>>()).Returns(new HashSet<Cell>(cells));
 
         // A still life is unchanged, so the final state is the same cells after exactly one
         // algorithm run (the run that confirms nothing changed).
@@ -212,6 +219,39 @@ public class BoardServiceTests
 
         Assert.That(actual, Is.EqualTo(expected).Using<BoardState>(BoardStatesEqual));
         _repository.Received(1).UpdateExistingBoard(id, Arg.Is<BoardState>(s => BoardStatesEqual(s, expected)));
+    }
+
+    #endregion
+
+    #region Non-concluding boards
+
+    [Test]
+    public void FinalizeBoard_NeverSettles_ThrowsWhenBudgetExhausted()
+    {
+        int id = 1234;          // arbitrary id
+        int maxIterations = 5;  // small budget so the test is fast and the count is easy to verify
+
+        // A period-2 oscillator (think blinker): the board flips between two distinct phases and
+        // never reaches a fixed point. Step is mocked to toggle between two non-equal sets, so
+        // every step changes something and FinalizeBoard can never conclude.
+        Cell[] phaseA = [new Cell(0, 0)];
+        Cell[] phaseB = [new Cell(9, 9)];
+        _repository.GetExistingBoard(id).Returns(CellsToBoardState(phaseA));
+
+        int callCount = 0;
+        _stepper.Step(Arg.Any<IReadOnlySet<Cell>>())
+            .Returns(_ => new HashSet<Cell>(callCount++ % 2 == 0 ? phaseB : phaseA));
+
+        var ex = Assert.Throws<BoardDidNotConcludeException>(() => _service.FinalizeBoard(id, maxIterations));
+
+        // The exception carries the context the Web layer needs to build its error response.
+        Assert.That(ex!.BoardId, Is.EqualTo(id));
+        Assert.That(ex.MaxIterationCount, Is.EqualTo(maxIterations));
+
+        // The full budget is spent: Step is called exactly maxIterations times...
+        _stepper.Received(maxIterations).Step(Arg.Any<IReadOnlySet<Cell>>());
+        // ...and progress is persisted before giving up, so a later retry with a bigger budget can resume.
+        _repository.Received(1).UpdateExistingBoard(id, Arg.Is<BoardState>(s => s.IterationCount == maxIterations));
     }
 
     #endregion

@@ -25,6 +25,8 @@ internal class Program
             new BoardRepositoryUsingFileSystem(
                 serviceProvider.GetRequiredService<IFileIOPassThrough>(),
                 Path.Combine(builder.Environment.ContentRootPath, "boarddata", "boards.json")));
+        // The stepper is stateless pure domain logic, so one shared Singleton is safe.
+        builder.Services.AddSingleton<IBoardStepper, BoardStepper>();
         builder.Services.AddScoped<IBoardService, BoardService>();
 
         var app = builder.Build();
