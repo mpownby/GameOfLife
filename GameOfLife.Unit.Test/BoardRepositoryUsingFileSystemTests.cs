@@ -77,6 +77,20 @@ public class BoardRepositoryUsingFileSystemTests
         Assert.That(second.GetExistingBoard(id).InitialState, Is.EquivalentTo(new[] { new Cell(7, 8) }));
     }
 
+    [Test]
+    public void Constructor_FileContainsJsonNull_StartsEmpty()
+    {
+        // System.Text.Json deserializes the literal "null" to a null list; the `?? []` fallback
+        // must turn that into an empty catalog rather than leaving _boards null (which would NRE
+        // on the first write). The first board created therefore still gets id 0.
+        _fileIO.Exists(Arg.Any<string>()).Returns(true);
+        _fileIO.ReadAllText(Arg.Any<string>()).Returns("null");
+
+        var repo = CreateRepository();
+
+        Assert.That(repo.CreateNewBoard(StateWith(new Cell(0, 0))), Is.EqualTo(0));
+    }
+
     // ---------------------------------------------------------------------
     // CreateNewBoard
     // ---------------------------------------------------------------------
@@ -94,14 +108,17 @@ public class BoardRepositoryUsingFileSystemTests
     [Test]
     public void CreateNewBoard_PersistsAtomically_WritesTempThenMovesOverTarget()
     {
-        var repo = CreateRepository();
+        const string path = "boards.json";
+        const string tempPath = path + ".tmp";   // the sibling temp file the atomic write goes through
+        var repo = CreateRepository(path);
 
         repo.CreateNewBoard(StateWith(new Cell(0, 0)));
 
+        // Pin the exact temp path: write to "<path>.tmp" first, then move that over the target.
         Received.InOrder(() =>
         {
-            _fileIO.WriteAllText(Arg.Any<string>(), Arg.Any<string>());
-            _fileIO.Move(Arg.Any<string>(), Arg.Any<string>(), true);
+            _fileIO.WriteAllText(tempPath, Arg.Any<string>());
+            _fileIO.Move(tempPath, path, true);
         });
     }
 
@@ -156,7 +173,8 @@ public class BoardRepositoryUsingFileSystemTests
     {
         var repo = CreateRepository();
 
-        Assert.Throws<KeyNotFoundException>(() => repo.GetExistingBoard(0));
+        var ex = Assert.Throws<KeyNotFoundException>(() => repo.GetExistingBoard(42));
+        Assert.That(ex!.Message, Does.Contain("42"));   // message names the offending id
         Assert.Throws<KeyNotFoundException>(() => repo.GetExistingBoard(-1));
     }
 

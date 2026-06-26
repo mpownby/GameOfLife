@@ -63,7 +63,11 @@ public class BoardsControllerTests
 
         var result = _controller.CreateBoard(request);
 
-        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        var badRequest = result as BadRequestObjectResult;
+        Assert.That(badRequest, Is.Not.Null);
+        // The body carries an explanatory error message (anonymous { error = "..." }); pin its text.
+        var error = badRequest!.Value!.GetType().GetProperty("error")!.GetValue(badRequest.Value) as string;
+        Assert.That(error, Does.Contain("[x, y]"));
         _service.DidNotReceive().CreateNewBoard(Arg.Any<IReadOnlyCollection<Cell>>());
     }
 

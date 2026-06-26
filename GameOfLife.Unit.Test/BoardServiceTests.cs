@@ -97,7 +97,11 @@ public class BoardServiceTests
     [Test]
     public void CreateNewBoard_NullLiveCells_ThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => _service.CreateNewBoard(null!));
+        // Assert on ParamName, not just the type: the HashSet copy made downstream would also
+        // throw ArgumentNullException (paramName "collection"), so only checking the type would
+        // pass even if the explicit guard were removed. The guard names the public parameter.
+        var ex = Assert.Throws<ArgumentNullException>(() => _service.CreateNewBoard(null!));
+        Assert.That(ex!.ParamName, Is.EqualTo("liveCells"));
     }
 
     #endregion
@@ -189,7 +193,8 @@ public class BoardServiceTests
     public void ConvertGridToLiveCells_NullRow_ThrowsArgumentException()
     {
         bool[][] grid = [[true], null!];
-        Assert.Throws<ArgumentException>(() => _service.ConvertGridToLiveCells(grid));
+        var ex = Assert.Throws<ArgumentException>(() => _service.ConvertGridToLiveCells(grid));
+        Assert.That(ex!.Message, Does.Contain("Grid row"));
     }
 
     #endregion
@@ -247,6 +252,8 @@ public class BoardServiceTests
         // The exception carries the context the Web layer needs to build its error response.
         Assert.That(ex!.BoardId, Is.EqualTo(id));
         Assert.That(ex.MaxIterationCount, Is.EqualTo(maxIterations));
+        // The message embeds the id and budget for diagnostics/logging.
+        Assert.That(ex.Message, Does.Contain(id.ToString()).And.Contain(maxIterations.ToString()));
 
         // The full budget is spent: Step is called exactly maxIterations times...
         _stepper.Received(maxIterations).Step(Arg.Any<IReadOnlySet<Cell>>());
@@ -260,6 +267,21 @@ public class BoardServiceTests
         // A negative budget is a caller bug; fail fast rather than doing any work or I/O.
         Assert.Throws<ArgumentOutOfRangeException>(() => _service.FinalizeBoard(7, -1));
         _repository.DidNotReceive().GetExistingBoard(Arg.Any<int>());   // validated before any I/O
+    }
+
+    [Test]
+    public void FinalizeBoard_ZeroBudget_ThrowsWithoutSteppingOrPersisting()
+    {
+        // 0 is a valid "don't even try" budget: the loop never runs, iterations stays 0, so there
+        // is nothing to persist (the `iterations > 0` guard must be a strict greater-than). The
+        // board still hasn't concluded, so we fail.
+        int id = 1234;
+        _repository.GetExistingBoard(id).Returns(CellsToBoardState([new Cell(0, 0)]));
+
+        Assert.Throws<BoardDidNotConcludeException>(() => _service.FinalizeBoard(id, 0));
+
+        _stepper.DidNotReceive().Step(Arg.Any<IReadOnlySet<Cell>>());
+        _repository.DidNotReceive().UpdateExistingBoard(Arg.Any<int>(), Arg.Any<BoardState>());
     }
 
     #endregion
